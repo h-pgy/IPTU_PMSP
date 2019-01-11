@@ -1,7 +1,6 @@
 import pandas as pd
 import csv
 from simpledbf import Dbf5
-from multiprocessing import Process
 import os
 
 class Iptu():
