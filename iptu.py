@@ -4,25 +4,17 @@ from simpledbf import Dbf5
 
 class Iptu():
     
-    def __init__(self, bairros = '', path = 'IPTU_2018.csv', encoding = 'utf-8', path_log = 'DEINFO_SEGTOS_212.dbf'):
+    def __init__(self,df_log, file, bairros = '', encoding = 'utf-8'):
         
-        self.file = open(path, 'rt')
+        self.file = open(file, 'rt')
         self.cols = self.gerar_reader(cols = False).fieldnames
         if not bairros:
-            self.bairros = self.list_bairros_log()
+            self.bairros = list_bairros_log()
         else:
             self.bairros = bairros
-        self.mem_bairros = self.criar_mem_bairros(self.parsear_dbf(path_log))
+        self.mem_bairros = self.criar_mem_bairros(df_log)
         self.linhas = []
-        
-    def parsear_dbf(self,path_dbf):
-        '''Parseia o arquivo dbf e gera um DataFrame'''
-
-        dbf = Dbf5(path_dbf, codec='utf-8')
-        df = dbf.to_dataframe()
-        
-        return df
-        
+            
     
     def criar_mem_bairros(self, df):
         '''Criar os dicionarios para filtragem dos bairros'''
@@ -37,11 +29,6 @@ class Iptu():
         
         return dic_d, dic_e        
     
-    def list_bairros_log(self):
-        
-        l = list(self.logradouros['BAIRRO_E'])
-        l.extend(list(self.logradouros['BAIRRO_D']))
-        return set(l)
     
     def gerar_reader(self, cols = True):
         if not cols:
@@ -53,24 +40,25 @@ class Iptu():
         
         cep = linha['CEP DO IMOVEL'].replace('-', '')
         try:
-            bairro = self.mem_bairros[0]
+            bairro = self.mem_bairros[0][cep]
         except KeyError:
             try:
-                bairro = self.mem_bairros[1]
+                bairro = self.mem_bairros[1][cep]
             except KeyError:
-                bairro = 'NAO ENCONTRADO'
+                return False
         linha['BAIRRO'] = bairro
+        return linha
         
         
     def pegar_linha(self, reader):
         try:
             linha = reader.__next__()
-            self.pegar_bairro(linha)
+            linha = self.pegar_bairro(linha)
             return linha, 1
         except StopIteration:
             return {}, 0
     
-    def filtrar_bairros(self, chunk = 100000):
+    def filtrar_bairros(self, chunk = 1000000):
         
         reader = self.gerar_reader()
         count = 0
@@ -78,12 +66,22 @@ class Iptu():
             for i in range(chunk):
                 linha, flag = self.pegar_linha(reader)
                 if flag:
-                    self.linhas.append(linha)
-                    
+                    if linha:
+                        self.linhas.append(linha)
                 else:
                     break
             else:
                 count += chunk
-                print('{} Imoveis parseados'.format(count))
-        self.file.close()        
-        print('Todos os imoveis foram parseados')
+            if not flag:
+                break        
+    
+    def gerar_df(self):
+        
+        self.df = pd.DataFrame.from_dict(self.linhas)
+        del self.linhas
+        
+    def main_iptu(self):
+        
+        self.filtrar_bairros()
+        self.gerar_df()
+        self.file.close()
